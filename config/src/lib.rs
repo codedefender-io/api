@@ -108,6 +108,9 @@ pub struct CDModuleSettings {
     /// Whether to enable IAT/Import protection.
     #[serde(default)]
     pub import_protection: bool,
+    /// Should the output file be packed/compressed? This option only works for usermode modules.
+    #[serde(default)]
+    pub pack_output_file: bool,
     /// Obscure the entry point of the module with anti tamper and anti debug tactics
     #[serde(default)]
     pub obscure_entry_point: bool,
