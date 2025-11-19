@@ -293,8 +293,8 @@ pub enum ObfuscationPass {
     LeaEncodeImm(LeaEncodeImm),
     ObscureConstants(ObscureConstants),
     SuppressConstants(SuppressConstants),
+    ObscureReferences(ObscureReferences),
     IDADecompilerCrasher,
-    ObscureReferences,
     AntiEmulator,
 }
 
