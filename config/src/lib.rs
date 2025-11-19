@@ -274,6 +274,8 @@ pub struct SplitBlockPass {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LeaEncodeImm {
     pub mba_enhance: bool,
+    /// Number of iterations to attempt transformation.
+    pub iterations: u32,
     /// Percent chance to apply transformation (0–100).
     pub probability: u32,
     pub ethnicities: SsaOrigins,
