@@ -1,6 +1,6 @@
 [package]
 name = "codedefender-api"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Blocking client library for the CodeDefender binary obfuscation API."
 license = "Apache-2.0"
