@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Current supported YAML config version.
-pub const YAML_CONFIG_VERSION: &str = "1.0.4";
+pub const YAML_CONFIG_VERSION: &str = "1.0.5";
 
 /// Available SIMD extension types used by mutation engines.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -17,7 +17,7 @@ pub enum MutationEngineExtension {
     /// All base instructions + Legacy SSE instructions up until SSE3
     SSE3,
     /// All base instructions + Legacy SSE instructions up until SSE4.2
-    SSE42
+    SSE42,
 }
 
 /// Supported PE environments.
@@ -211,6 +211,7 @@ pub struct IDADecompilerCrasher;
 /// Suppress constants and prevent them from rematerializing at runtime.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SuppressConstants {
+    pub mba_enhance: bool,
     pub ethnicities: SsaOrigins,
 }
 
@@ -218,6 +219,7 @@ pub struct SuppressConstants {
 /// Use the SuppressConstants pass in tandem with this!
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ObscureConstants {
+    pub mba_enhance: bool,
     pub probability: u32,
     pub iterations: u32,
     pub bitwidths: BitWidths,
@@ -226,11 +228,14 @@ pub struct ObscureConstants {
 
 /// Memory reference obfuscation pass.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ObscureReferences;
+pub struct ObscureReferences {
+    pub mba_enhance: bool,
+}
 
 /// Control-flow obfuscation pass.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ObscureControlFlow {
+    pub mba_enhance: bool,
     pub probability: u32,
 }
 
@@ -268,6 +273,7 @@ pub struct SplitBlockPass {
 /// Encode immediate ssa values into lea's
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LeaEncodeImm {
+    pub mba_enhance: bool,
     /// Percent chance to apply transformation (0–100).
     pub probability: u32,
     pub ethnicities: SsaOrigins,
