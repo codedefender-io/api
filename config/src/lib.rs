@@ -298,6 +298,7 @@ pub enum ObfuscationPass {
     ObscureReferences(ObscureReferences),
     IDADecompilerCrasher,
     AntiEmulator,
+    SigBreaker,
 }
 
 /// Profile definition used to apply passes to symbols.
