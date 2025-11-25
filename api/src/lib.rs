@@ -6,7 +6,7 @@
 //! All endpoints require a valid API key, passed via the `Authorization` header
 //! using the `ApiKey` scheme.
 
-use codedefender_config::{AnalysisResult, CDConfig};
+use codedefender_config::{AnalysisResult, Config};
 use reqwest::{blocking::Client, StatusCode};
 use std::collections::HashMap;
 
@@ -118,7 +118,7 @@ pub fn analyze_program(
 /// Returns an error if the request fails or the server returns a non-success status.
 pub fn defend(
     uuid: String,
-    config: CDConfig,
+    config: Config,
     client: &Client,
     api_key: &str,
 ) -> Result<String, reqwest::Error> {

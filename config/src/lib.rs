@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Current supported YAML config version.
-pub const YAML_CONFIG_VERSION: &str = "1.0.5";
+pub const YAML_CONFIG_VERSION: &str = "1.0.6";
 
 /// Available SIMD extension types used by mutation engines.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -72,7 +72,7 @@ pub struct AssemblerSettings {
 
 /// Compiler configuration (IR + codegen) for a profile.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CDCompilerSettings {
+pub struct CompilerSettings {
     /// Assembler settings.
     pub assembler_settings: AssemblerSettings,
     /// Optimization settings.
@@ -101,7 +101,7 @@ pub struct CustomSectionName {
 
 /// Global obfuscation settings for the module.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CDModuleSettings {
+pub struct ModuleSettings {
     /// Whether to crash the IDA decompiler intentionally.
     #[serde(default)]
     pub ida_crasher: bool,
@@ -281,6 +281,12 @@ pub struct LeaEncodeImm {
     pub ethnicities: SsaOrigins,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SigBreaker {
+    /// Calling convention used for lifting, only `WindowsAbi`, and `Conservative` are supported.
+    pub calling_convention: String,
+}
+
 /// All possible obfuscation passes.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -296,31 +302,31 @@ pub enum ObfuscationPass {
     ObscureConstants(ObscureConstants),
     SuppressConstants(SuppressConstants),
     ObscureReferences(ObscureReferences),
+    SigBreaker(SigBreaker),
     IDADecompilerCrasher,
     AntiEmulator,
-    SigBreaker,
 }
 
 /// Profile definition used to apply passes to symbols.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CDProfile {
+pub struct Profile {
     /// Name of the profile.
     pub name: String,
     /// Obfuscation passes for this profile.
     pub passes: Vec<ObfuscationPass>,
     /// Compiler settings for this profile.
-    pub compiler_settings: CDCompilerSettings,
+    pub compiler_settings: CompilerSettings,
     /// List of symbol RVAs this profile targets.
     pub symbols: Vec<u64>,
 }
 
 /// Top-level config file structure.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CDConfig {
+pub struct Config {
     /// Module-wide settings.
-    pub module_settings: CDModuleSettings,
+    pub module_settings: ModuleSettings,
     /// All profiles to apply during obfuscation.
-    pub profiles: Vec<CDProfile>,
+    pub profiles: Vec<Profile>,
 }
 
 /// Information about a single function found during analysis.
@@ -386,11 +392,9 @@ pub struct YamlProfile {
     /// Passes to apply to this profile.
     pub passes: Vec<ObfuscationPass>,
     /// Compiler configuration for this profile.
-    pub compiler_settings: CDCompilerSettings,
+    pub compiler_settings: CompilerSettings,
     /// Symbols targeted by this profile.
     pub symbols: Vec<YamlSymbol>,
-    /// Only used by the SaaS UI. Not used by the CLI.
-    pub color: Option<String>,
 }
 
 /// Root YAML config structure.
@@ -399,7 +403,7 @@ pub struct YamlConfig {
     /// Version of the config file format.
     pub version: String,
     /// Global module-wide obfuscation settings.
-    pub module_settings: CDModuleSettings,
+    pub module_settings: ModuleSettings,
     /// Obfuscation profiles to apply.
     pub profiles: Vec<YamlProfile>,
 }

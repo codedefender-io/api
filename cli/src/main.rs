@@ -1,7 +1,7 @@
 use clap::Parser;
 use codedefender_api::DownloadStatus;
 use codedefender_config::{
-    AnalysisResult, CDConfig, CDProfile, YAML_CONFIG_VERSION, YamlConfig, YamlSymbol,
+    AnalysisResult, Config, Profile, YAML_CONFIG_VERSION, YamlConfig, YamlSymbol,
 };
 use std::{
     fs,
@@ -148,14 +148,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Analysis finished...");
     log::info!("Constructing config...");
 
-    let mut cdconfig = CDConfig {
+    let mut cdconfig = Config {
         module_settings: config.module_settings,
         profiles: vec![],
     };
 
     for profile in &config.profiles {
         let symbols = resolve_symbols(profile.symbols.as_slice(), &analysis)?;
-        cdconfig.profiles.push(CDProfile {
+        cdconfig.profiles.push(Profile {
             name: profile.name.clone(),
             passes: profile.passes.clone(),
             compiler_settings: profile.compiler_settings.clone(),
