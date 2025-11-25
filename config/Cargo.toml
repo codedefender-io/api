@@ -1,6 +1,6 @@
 [package]
 name = "codedefender-config"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2024"
 description = "Configuration utilities for CodeDefender, a code obfuscation and protection system."
 license = "Apache-2.0"

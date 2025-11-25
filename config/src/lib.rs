@@ -283,6 +283,8 @@ pub struct LeaEncodeImm {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SigBreaker {
+    pub shuffle_insts: bool,
+    pub random_segment_selector: bool,
     /// Calling convention used for lifting, only `WindowsAbi`, and `Conservative` are supported.
     pub calling_convention: String,
 }
