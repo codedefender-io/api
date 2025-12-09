@@ -179,7 +179,7 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
 name = "codedefender-api"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "codedefender-config",
  "once_cell",
@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "codedefender-config"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "serde",
 ]
