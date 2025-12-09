@@ -182,6 +182,7 @@ name = "codedefender-api"
 version = "0.2.5"
 dependencies = [
  "codedefender-config",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",
@@ -193,7 +194,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "codedefender-api",
- "codedefender-config",
  "env_logger",
  "log",
  "reqwest",

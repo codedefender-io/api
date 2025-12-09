@@ -1,19 +1,22 @@
 use clap::Parser;
-use codedefender_api::DownloadStatus;
-use codedefender_config::{
+use codedefender_api::codedefender_config::{
     AnalysisResult, Config, Profile, YAML_CONFIG_VERSION, YamlConfig, YamlSymbol,
 };
+use codedefender_api::{Status, serde_json};
 use std::{
     fs,
     path::PathBuf,
     time::{Duration, Instant},
 };
-
 mod api {
-    pub use codedefender_api::analyze_program as analyze;
     pub use codedefender_api::defend;
     pub use codedefender_api::download;
-    pub use codedefender_api::upload_file as upload;
+    pub use codedefender_api::download_analysis_result;
+    pub use codedefender_api::download_obfuscated_file;
+    pub use codedefender_api::get_analyze_status;
+    pub use codedefender_api::start_analyze;
+    pub use codedefender_api::upload_data;
+    pub use codedefender_api::upload_file;
 }
 
 const CLI_DOWNLOAD_LINK: &str = "https://github.com/codedefender-io/api/releases";
@@ -26,28 +29,22 @@ pub struct Cli {
     /// Path to the YAML configuration file
     #[arg(short, long, value_name = "FILE")]
     pub config: PathBuf,
-
     /// Log level (error, warn, info, debug, trace)
     #[arg(long, value_enum, default_value = "info")]
     pub log_level: log::LevelFilter,
-
     /// API key provided by the CodeDefender web service. You can either pass it on the commandline or assign it to "CD_API_KEY" env variable.
     #[arg(long, env = "CD_API_KEY")]
     pub api_key: String,
-
     /// Poll timeout for downloading the obfuscated program (in milliseconds)
     /// Do not go below 500 otherwise you will be timed out.
     #[arg(long, default_value_t = 500)]
     pub timeout: u64,
-
     /// Input binary to process
     #[arg(long, value_name = "INPUT")]
     pub input_file: PathBuf,
-
     /// Optional debug symbol (PDB) file
     #[arg(long, value_name = "PDB")]
     pub pdb_file: Option<PathBuf>,
-
     /// Output path for the Zip file containing the obfuscated binary and dbg file
     #[arg(long, value_name = "OUTPUT")]
     pub output: PathBuf,
@@ -60,11 +57,10 @@ fn resolve_symbols(
     analysis: &AnalysisResult,
 ) -> Result<Vec<u64>, Box<dyn std::error::Error>> {
     let mut resolved = Vec::new();
-
     for symbol in symbols {
         match symbol {
             YamlSymbol::Name(name) => {
-                // Search in returned functions and rejects for symbol by name.
+                // Search in returned in functions and rejects for symbol by name.
                 // If it was rejected for "ReadWriteToCode" we will force resolve it.
                 let rva = analysis
                     .functions
@@ -78,7 +74,6 @@ fn resolve_symbols(
                             .find(|r| r.symbol == *name && r.ty == "ReadWriteToCode")
                             .map(|e| e.rva)
                     });
-
                 match rva {
                     Some(rva) => resolved.push(rva),
                     None => {
@@ -96,7 +91,6 @@ fn resolve_symbols(
             }
         }
     }
-
     Ok(resolved)
 }
 
@@ -108,10 +102,21 @@ fn is_valid_rva(rva: u64, analysis: &AnalysisResult) -> bool {
             .any(|r| r.rva == rva && r.ty == "ReadWriteToCode")
 }
 
+fn upload_disassembly_settings(
+    file_id: &str,
+    client: &reqwest::blocking::Client,
+    api_key: &str,
+    config: &YamlConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let settings_bytes = serde_json::to_vec(&config.disassembly_settings)?;
+    let settings_file_name = format!("{}-disasm-settings.json", file_id);
+    api::upload_data(settings_bytes, settings_file_name, client, api_key)?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     env_logger::builder().filter_level(cli.log_level).init();
-
     let config_contents = fs::read_to_string(&cli.config)?;
     let config: YamlConfig = serde_yaml::from_str(&config_contents)?;
 
@@ -127,23 +132,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = reqwest::blocking::Client::new();
     let binary_file_bytes = fs::read(&cli.input_file)?;
-    let binary_file_uuid = api::upload(binary_file_bytes, &client, &cli.api_key)?;
-
+    let binary_file_uuid = api::upload_file(binary_file_bytes, &client, &cli.api_key)?;
     let pdb_file_uuid = match &cli.pdb_file {
-        Some(path) => Some(api::upload(fs::read(path)?, &client, &cli.api_key)?),
+        Some(path) => Some(api::upload_file(fs::read(path)?, &client, &cli.api_key)?),
         None => None,
     };
 
     log::info!("Uploaded file(s)...");
-    log::info!("Analyzing program...");
+    upload_disassembly_settings(&binary_file_uuid, &client, &cli.api_key, &config)?;
 
-    let analysis = api::analyze(
+    log::info!("Uploaded disassembly settings...");
+    log::info!("Starting analysis...");
+
+    let analyze_execution_id = api::start_analyze(
         binary_file_uuid.clone(),
         pdb_file_uuid,
         &client,
         &cli.api_key,
     )?;
 
+    let start_time = Instant::now();
+    let timeout_duration = Duration::from_secs(300); // 5 min
+    let mut analysis: Option<AnalysisResult> = None;
+
+    loop {
+        if start_time.elapsed() > timeout_duration {
+            log::error!("Timeout: analysis exceeded 5 minutes");
+            return Ok(());
+        }
+        match api::get_analyze_status(analyze_execution_id.clone(), &client, &cli.api_key) {
+            Status::Ready(url) => {
+                analysis = Some(api::download_analysis_result(&url, &client)?);
+                break;
+            }
+            Status::Processing => {
+                log::info!("Still Analyzing...");
+            }
+            Status::Failed(e) => {
+                log::error!("Analysis failed: {}", e);
+                return Ok(());
+            }
+        }
+        std::thread::sleep(Duration::from_millis(cli.timeout));
+    }
+
+    let analysis = analysis.ok_or("Analysis not completed")?;
     log::debug!("Analysis info: {:#X?}", analysis);
     log::info!("Analysis finished...");
     log::info!("Constructing config...");
@@ -168,6 +201,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .profiles
             .iter_mut()
             .find(|p| p.name == macro_profile.name);
+
         match profile {
             Some(p) => {
                 for rva in &macro_profile.rvas {
@@ -191,29 +225,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Obfuscating program...");
     let execution_id = api::defend(binary_file_uuid, cdconfig, &client, &cli.api_key)?;
     let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(300); // 5 min
 
     loop {
         if start_time.elapsed() > timeout_duration {
             log::error!("Timeout: obfuscation exceeded 5 minutes");
             return Ok(());
         }
-
         match api::download(execution_id.clone(), &client, &cli.api_key) {
-            DownloadStatus::Ready(bytes) => {
+            Status::Ready(url) => {
+                let bytes = api::download_obfuscated_file(&url, &client)?;
                 fs::write(&cli.output, bytes)?;
                 log::info!("Obfuscated binary written to {:?}", cli.output);
                 return Ok(());
             }
-            DownloadStatus::Processing => {
+            Status::Processing => {
                 log::info!("Still Obfuscating...");
             }
-            DownloadStatus::Failed(e) => {
+            Status::Failed(e) => {
                 log::error!("Obfuscation failed: {}", e);
                 return Ok(());
             }
         }
-
         std::thread::sleep(Duration::from_millis(cli.timeout));
     }
 }

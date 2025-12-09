@@ -1,4 +1,19 @@
-version: "1.0.1"
+version: "1.0.6"
+disassembly_settings:
+  allow_code_reads_and_writes: false
+  allow_unknown_indirect_jumps: false
+  allow_mismatched_branch_counts: true
+  thunk_mismatched_branch_counts: true
+  thunk_branch_target_identifiers: true
+  thunk_no_prev_block: true
+  thunk_data_references: true
+  always_thunk_entry: true
+  follow_faulting_instructions: true
+  pass_interrupts: false
+  pass_exceptions: false
+  aggressive_pointer_analysis: false
+  perform_relocation_analysis: true
+  explore_catch_funclet_continuations: true
 module_settings:
   ida_crasher: false
   import_protection: false
@@ -14,16 +29,27 @@ profiles:
   - name: "Profile1"
     passes:
       - type: ObscureControlFlow
+        mba_enhance: false
+        probability: 100
       - type: ObscureReferences
+        mba_enhance: false
       - type: ObscureConstants
+        mba_enhance: false
+        probability: 100
+        iterations: 1
         ethnicities:
           normal: true
           memop: true
           fp_based_memop: true
           sp_based_memop: true
+        bitwidths:
+          bit8: true
+          bit16: true
+          bit32: true
+          bit64: true
       - type: MutationEngine
         iterations: 1
-        probability: 1
+        probability: 100
         extension: SSE42
         semantics:
           add: true
@@ -61,4 +87,4 @@ profiles:
         split_on_calls_fallback: true
     symbols:
       - !Name "main" # Specify via name
-      - !Rva 0x1010  # Specify via RVA
+      - !Rva 0x11A4  # Specify via RVA

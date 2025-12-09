@@ -377,6 +377,24 @@ pub struct AnalysisResult {
     pub macros: Vec<AnalysisMacroProfile>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct DisassemblySettings {
+    pub allow_code_reads_and_writes: bool,
+    pub allow_unknown_indirect_jumps: bool,
+    pub allow_mismatched_branch_counts: bool,
+    pub thunk_mismatched_branch_counts: bool,
+    pub thunk_branch_target_identifiers: bool,
+    pub thunk_no_prev_block: bool,
+    pub thunk_data_references: bool,
+    pub always_thunk_entry: bool,
+    pub follow_faulting_instructions: bool,
+    pub pass_interrupts: bool,
+    pub pass_exceptions: bool,
+    pub aggressive_pointer_analysis: bool,
+    pub perform_relocation_analysis: bool,
+    pub explore_catch_funclet_continuations: bool,
+}
+
 /// Symbol representation used in YAML: either name or RVA.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum YamlSymbol {
@@ -404,6 +422,8 @@ pub struct YamlProfile {
 pub struct YamlConfig {
     /// Version of the config file format.
     pub version: String,
+    /// The global disassembly settings.
+    pub disassembly_settings: DisassemblySettings,
     /// Global module-wide obfuscation settings.
     pub module_settings: ModuleSettings,
     /// Obfuscation profiles to apply.
