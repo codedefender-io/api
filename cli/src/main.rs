@@ -2,12 +2,14 @@ use clap::Parser;
 use codedefender_api::codedefender_config::{
     AnalysisResult, Config, Profile, YAML_CONFIG_VERSION, YamlConfig, YamlSymbol,
 };
-use codedefender_api::{Status, serde_json};
+use codedefender_api::{Status, serde_json, upload_data};
 use std::{
     fs,
     path::PathBuf,
     time::{Duration, Instant},
 };
+
+use crate::pdb::parse_pdb;
 mod api {
     pub use codedefender_api::defend;
     pub use codedefender_api::download;
@@ -18,6 +20,8 @@ mod api {
     pub use codedefender_api::upload_data;
     pub use codedefender_api::upload_file;
 }
+
+mod pdb;
 
 const CLI_DOWNLOAD_LINK: &str = "https://github.com/codedefender-io/api/releases";
 
@@ -134,7 +138,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let binary_file_bytes = fs::read(&cli.input_file)?;
     let binary_file_uuid = api::upload_file(binary_file_bytes, &client, &cli.api_key)?;
     let pdb_file_uuid = match &cli.pdb_file {
-        Some(path) => Some(api::upload_file(fs::read(path)?, &client, &cli.api_key)?),
+        Some(path) => {
+            let pdb_bytes = fs::read(path)?;
+            Some(upload_data(
+                parse_pdb(&pdb_bytes).expect("Failed to preparse PDB file!"),
+                format!("{}.pdb", binary_file_uuid),
+                &client,
+                &cli.api_key,
+            )?)
+        }
         None => None,
     };
 
