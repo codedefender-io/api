@@ -79,7 +79,6 @@ pub fn get_upload_info(
     let json: HashMap<String, String> = response.json()?;
     let upload_url = json.get("uploadUrl").cloned().ok_or("Missing uploadUrl")?;
     let file_id = json.get("fileId").cloned().ok_or("Missing fileId")?;
-
     Ok((file_id, upload_url))
 }
 

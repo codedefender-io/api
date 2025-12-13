@@ -136,13 +136,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = reqwest::blocking::Client::new();
     let binary_file_bytes = fs::read(&cli.input_file)?;
-    let binary_file_uuid = api::upload_file(binary_file_bytes, &client, &cli.api_key)?;
+    let binary_file_uuid = api::upload_file(binary_file_bytes, &client, &cli.api_key)
+        .expect("Failed to upload binary file!");
+
     let pdb_file_uuid = match &cli.pdb_file {
         Some(path) => {
             let pdb_bytes = fs::read(path)?;
             Some(upload_data(
                 parse_pdb(&pdb_bytes).expect("Failed to preparse PDB file!"),
-                format!("{}.pdb", binary_file_uuid),
+                "debug.pdb".to_owned(),
                 &client,
                 &cli.api_key,
             )?)
