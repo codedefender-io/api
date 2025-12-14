@@ -93,6 +93,15 @@ fn resolve_symbols(
                 }
                 resolved.push(*rva);
             }
+            YamlSymbol::All => {
+                resolved.extend(
+                    analysis
+                        .functions
+                        .iter()
+                        .map(|e| e.rva)
+                        .collect::<Vec<u64>>(),
+                );
+            }
         }
     }
     Ok(resolved)

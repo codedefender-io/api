@@ -402,6 +402,8 @@ pub enum YamlSymbol {
     Name(String),
     /// Symbol RVA.
     Rva(u64),
+    /// All Symbols
+    All,
 }
 
 /// Obfuscation profile for YAML configuration.
