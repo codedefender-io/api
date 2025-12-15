@@ -287,6 +287,8 @@ pub struct SigBreaker {
     pub random_segment_selector: bool,
     /// Calling convention used for lifting, only `WindowsAbi`, and `Conservative` are supported.
     pub calling_convention: String,
+    pub shuffle_opcodes: bool,
+    pub instruction_substitution: bool,
 }
 
 /// All possible obfuscation passes.
