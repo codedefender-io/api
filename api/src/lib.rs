@@ -8,10 +8,7 @@
 use codedefender_config::{AnalysisResult, Config};
 use reqwest::{StatusCode, blocking::Client};
 use std::collections::HashMap;
-use std::error::Error;
-use std::io;
 use once_cell::sync::Lazy;
-
 pub use codedefender_config;
 pub use serde_json;
 
@@ -22,23 +19,18 @@ pub static BASE_URL: Lazy<String> = Lazy::new(|| {
 
 pub static GET_UPLOAD_URL_EP: Lazy<String> =
     Lazy::new(|| format!("{}/api/get-upload-url", *BASE_URL));
-
 pub static ANALYZE_EP: Lazy<String> =
     Lazy::new(|| format!("{}/api/analyze", *BASE_URL));
-
 pub static ANALYZE_STATUS_EP: Lazy<String> =
     Lazy::new(|| format!("{}/api/analyze-status", *BASE_URL));
-
 pub static DEFEND_EP: Lazy<String> =
     Lazy::new(|| format!("{}/api/defend", *BASE_URL));
-
 pub static DOWNLOAD_EP: Lazy<String> =
     Lazy::new(|| format!("{}/api/download", *BASE_URL));
 
 pub enum Status {
     Ready(String),
     Processing,
-    Failed(Box<dyn Error>),
 }
 
 /// Gets the presigned upload URL and file ID for uploading a file.
@@ -52,36 +44,35 @@ pub enum Status {
 ///
 /// # Returns
 ///
-/// A `Result<(String, String), Box<dyn Error>>` containing the file ID and presigned upload URL on success.
+/// A tuple containing the file ID and presigned upload URL.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the request fails or if the server responds with a non-success status code.
+/// Panics if the request fails or if the server responds with a non-success status code, with a descriptive message.
 pub fn get_upload_info(
     file_size: usize,
     file_name: Option<String>,
     client: &Client,
     api_key: &str,
-) -> Result<(String, String), Box<dyn Error>> {
+) -> (String, String) {
     let mut query_params = HashMap::new();
     query_params.insert("fileSize".to_string(), file_size.to_string());
     if let Some(name) = file_name {
         query_params.insert("fileName".to_string(), name);
     }
-
     let response = client
         .get(&*GET_UPLOAD_URL_EP)
         .header("Authorization", format!("ApiKey {}", api_key))
         .query(&query_params)
-        .send()?
-        .error_for_status()?;
-
-    let json: HashMap<String, String> = response.json()?;
-    let upload_url = json.get("uploadUrl").cloned().ok_or("Missing uploadUrl")?;
-    let file_id = json.get("fileId").cloned().ok_or("Missing fileId")?;
-    Ok((file_id, upload_url))
+        .send()
+        .expect("Failed to send request to get upload URL")
+        .error_for_status()
+        .expect("Non-success status when getting upload URL");
+    let json: HashMap<String, String> = response.json().expect("Failed to parse JSON response for upload info");
+    let upload_url = json.get("uploadUrl").cloned().expect("Missing 'uploadUrl' in response");
+    let file_id = json.get("fileId").cloned().expect("Missing 'fileId' in response");
+    (file_id, upload_url)
 }
-
 /// Uploads file bytes to the presigned S3 URL.
 ///
 /// # Arguments
@@ -90,28 +81,24 @@ pub fn get_upload_info(
 /// * `file_bytes` - The raw contents of the file to upload.
 /// * `client` - A preconfigured `reqwest::blocking::Client`.
 ///
-/// # Returns
+/// # Panics
 ///
-/// `Ok(())` on success.
-///
-/// # Errors
-///
-/// Returns an error if the upload fails or the server responds with a non-success status code.
+/// Panics if the upload fails or the server responds with a non-success status code, with a descriptive message.
 pub fn upload_to_s3(
     upload_url: &str,
     file_bytes: Vec<u8>,
     client: &Client,
-) -> Result<(), Box<dyn Error>> {
+) {
     client
         .put(upload_url)
         .header("Content-Type", "application/octet-stream")
         .header("Content-Length", file_bytes.len().to_string())
         .body(file_bytes)
-        .send()?
-        .error_for_status()?;
-    Ok(())
+        .send()
+        .expect("Failed to send upload request to S3")
+        .error_for_status()
+        .expect("Non-success status when uploading to S3");
 }
-
 /// Uploads raw data bytes to CodeDefender with a specific filename and returns the file ID.
 ///
 /// # Arguments
@@ -123,23 +110,22 @@ pub fn upload_to_s3(
 ///
 /// # Returns
 ///
-/// A `Result<String, Box<dyn Error>>` containing the file ID on success.
+/// The file ID.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the request fails or if the server responds with a non-success status code.
+/// Panics if the request fails or if the server responds with a non-success status code, with a descriptive message.
 pub fn upload_data(
     data: Vec<u8>,
     filename: String,
     client: &Client,
     api_key: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> String {
     let file_size = data.len();
-    let (file_id, upload_url) = get_upload_info(file_size, Some(filename), client, api_key)?;
-    upload_to_s3(&upload_url, data, client)?;
-    Ok(file_id)
+    let (file_id, upload_url) = get_upload_info(file_size, Some(filename), client, api_key);
+    upload_to_s3(&upload_url, data, client);
+    file_id
 }
-
 /// Uploads a binary file to CodeDefender and returns a UUID representing the uploaded file.
 ///
 /// # Arguments
@@ -150,22 +136,21 @@ pub fn upload_data(
 ///
 /// # Returns
 ///
-/// A `Result<String, Box<dyn Error>>` containing the UUID on success, or an error if the upload failed.
+/// The UUID.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the request fails or if the server responds with a non-success status code (not in 200..=299).
+/// Panics if the upload fails or if the server responds with a non-success status code, with a descriptive message.
 pub fn upload_file(
     file_bytes: Vec<u8>,
     client: &Client,
     api_key: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> String {
     let file_size = file_bytes.len();
-    let (file_id, upload_url) = get_upload_info(file_size, None, client, api_key)?;
-    upload_to_s3(&upload_url, file_bytes, client)?;
-    Ok(file_id)
+    let (file_id, upload_url) = get_upload_info(file_size, None, client, api_key);
+    upload_to_s3(&upload_url, file_bytes, client);
+    file_id
 }
-
 /// Starts analysis of a previously uploaded binary file and optionally its PDB file.
 ///
 /// # Arguments
@@ -177,17 +162,17 @@ pub fn upload_file(
 ///
 /// # Returns
 ///
-/// A `Result<String, Box<dyn Error>>` containing the execution ID for polling.
+/// The execution ID for polling.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the request fails or the server responds with a non-success status.
+/// Panics if the request fails or the server responds with a non-success status, with a descriptive message.
 pub fn start_analyze(
     file_id: String,
     pdb_file_id: Option<String>,
     client: &Client,
     api_key: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> String {
     let mut query_params = HashMap::new();
     query_params.insert("fileId".to_string(), file_id);
     if let Some(pdb_id) = pdb_file_id {
@@ -197,16 +182,17 @@ pub fn start_analyze(
         .put(&*ANALYZE_EP)
         .header("Authorization", format!("ApiKey {}", api_key))
         .query(&query_params)
-        .send()?
-        .error_for_status()?;
-    let json: HashMap<String, String> = response.json()?;
+        .send()
+        .expect("Failed to send request to start analysis")
+        .error_for_status()
+        .expect("Non-success status when starting analysis");
+    let json: HashMap<String, String> = response.json().expect("Failed to parse JSON response for analysis start");
     let execution_id = json
         .get("executionId")
         .cloned()
-        .ok_or("Missing executionId")?;
-    Ok(execution_id)
+        .expect("Missing 'executionId' in response");
+    execution_id
 }
-
 /// Polls the analysis status.
 ///
 /// This endpoint should be called periodically until the analysis is complete.
@@ -219,42 +205,31 @@ pub fn start_analyze(
 ///
 /// # Returns
 ///
-/// An [`Status`] enum indicating whether the analysis is ready (with presigned URL), still processing, or failed.
+/// A [`Status`] enum indicating whether the analysis is ready (with presigned URL) or still processing.
+///
+/// # Panics
+///
+/// Panics if the request fails, the server responds with a non-success status, or required fields are missing, with a descriptive message.
 pub fn get_analyze_status(execution_id: String, client: &Client, api_key: &str) -> Status {
     let mut query_params = HashMap::new();
     query_params.insert("executionId".to_string(), execution_id);
-    let result = client
+    let resp = client
         .get(&*ANALYZE_STATUS_EP)
         .header("Authorization", format!("ApiKey {}", api_key))
         .query(&query_params)
-        .send();
-    let Ok(resp) = result else {
-        return Status::Failed(Box::new(result.unwrap_err()));
-    };
+        .send()
+        .expect("Failed to send request for analysis status");
     let status = resp.status();
     if status == StatusCode::ACCEPTED {
         Status::Processing
     } else if status == StatusCode::OK {
-        let json: serde_json::Value = match resp.json() {
-            Ok(v) => v,
-            Err(e) => return Status::Failed(Box::new(e)),
-        };
-
-        match json["analysisUrl"]
-            .as_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing analysisUrl"))
-        {
-            Ok(value) => Status::Ready(value.to_string()),
-            Err(e) => Status::Failed(Box::new(e)),
-        }
+        let json: serde_json::Value = resp.json().expect("Failed to parse JSON for analysis status");
+        let value = json["analysisUrl"].as_str().expect("Missing 'analysisUrl' in response");
+        Status::Ready(value.to_string())
     } else {
-        Status::Failed(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Internal error!"),
-        )))
+        panic!("Unexpected status code when getting analysis status: {}", status);
     }
 }
-
 /// Downloads and deserializes the analysis result from the presigned URL.
 ///
 /// # Arguments
@@ -266,19 +241,19 @@ pub fn get_analyze_status(execution_id: String, client: &Client, api_key: &str) 
 ///
 /// An `AnalysisResult` containing metadata about the uploaded binary.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the download fails, the server responds with a non-success status, or deserialization fails.
+/// Panics if the download fails, the server responds with a non-success status, or deserialization fails, with a descriptive message.
 pub fn download_analysis_result(
     analysis_url: &str,
     client: &Client,
-) -> Result<AnalysisResult, Box<dyn Error>> {
-    let response = client.get(analysis_url).send()?.error_for_status()?;
-    let result_bytes = response.bytes()?;
-    let analysis_result: AnalysisResult = serde_json::from_slice(&result_bytes)?;
-    Ok(analysis_result)
+) -> AnalysisResult {
+    let response = client.get(analysis_url).send().expect("Failed to send request to download analysis result")
+        .error_for_status().expect("Non-success status when downloading analysis result");
+    let result_bytes = response.bytes().expect("Failed to read bytes from analysis response");
+    let analysis_result: AnalysisResult = serde_json::from_slice(&result_bytes).expect("Failed to deserialize analysis result");
+    analysis_result
 }
-
 /// Starts the obfuscation process for a given file using the provided configuration.
 ///
 /// # Arguments
@@ -290,33 +265,32 @@ pub fn download_analysis_result(
 ///
 /// # Returns
 ///
-/// A `Result<String, reqwest::Error>` containing the `execution_id` used for polling.
+/// The `execution_id` used for polling.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the request fails or the server returns a non-success status.
+/// Panics if the request fails or the server returns a non-success status, with a descriptive message.
 pub fn defend(
     uuid: String,
     config: Config,
     client: &Client,
     api_key: &str,
-) -> Result<String, reqwest::Error> {
-    let body = serde_json::to_string(&config).expect("Failed to serialize CDConfig");
+) -> String {
+    let body = serde_json::to_string(&config).expect("Failed to serialize Config");
     let mut query_params = HashMap::new();
     query_params.insert("fileId", uuid);
-
     let response = client
         .post(&*DEFEND_EP)
         .header("Authorization", format!("ApiKey {}", api_key))
         .header("Content-Type", "application/json")
         .query(&query_params)
         .body(body)
-        .send()?
-        .error_for_status()?;
-
-    response.text()
+        .send()
+        .expect("Failed to send request to start obfuscation")
+        .error_for_status()
+        .expect("Non-success status when starting obfuscation");
+    response.text().expect("Failed to read text from obfuscation start response")
 }
-
 /// Polls the obfuscation status.
 ///
 /// This endpoint should be called every 500 milliseconds until the obfuscation is complete.
@@ -331,42 +305,31 @@ pub fn defend(
 ///
 /// # Returns
 ///
-/// A [`Status`] enum indicating whether the file is ready (with presigned URL), still processing, or failed.
+/// A [`Status`] enum indicating whether the file is ready (with presigned URL) or still processing.
+///
+/// # Panics
+///
+/// Panics if the request fails, the server responds with a non-success status, or required fields are missing, with a descriptive message.
 pub fn download(execution_id: String, client: &Client, api_key: &str) -> Status {
     let mut query_params = HashMap::new();
     query_params.insert("executionId".to_string(), execution_id);
-    let result = client
+    let resp = client
         .get(&*DOWNLOAD_EP)
         .header("Authorization", format!("ApiKey {}", api_key))
         .query(&query_params)
-        .send();
-    let Ok(resp) = result else {
-        return Status::Failed(Box::new(result.unwrap_err()));
-    };
+        .send()
+        .expect("Failed to send request for download status");
     let status = resp.status();
     if status == StatusCode::ACCEPTED {
         Status::Processing
     } else if status == StatusCode::OK {
-        let json: serde_json::Value = match resp.json() {
-            Ok(v) => v,
-            Err(e) => return Status::Failed(Box::new(e)),
-        };
-
-        match json["downloadUrl"]
-            .as_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing downloadUrl"))
-        {
-            Ok(value) => Status::Ready(value.to_string()),
-            Err(e) => Status::Failed(Box::new(e)),
-        }
+        let json: serde_json::Value = resp.json().expect("Failed to parse JSON for download status");
+        let value = json["downloadUrl"].as_str().expect("Missing 'downloadUrl' in response");
+        Status::Ready(value.to_string())
     } else {
-        Status::Failed(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Internal error!"),
-        )))
+        panic!("Unexpected status code when getting download status: {}", status);
     }
 }
-
 /// Downloads the obfuscated file from the presigned URL.
 ///
 /// # Arguments
@@ -376,16 +339,17 @@ pub fn download(execution_id: String, client: &Client, api_key: &str) -> Status 
 ///
 /// # Returns
 ///
-/// A `Result<Vec<u8>, Box<dyn Error>>` containing the obfuscated file bytes.
+/// The obfuscated file bytes.
 ///
-/// # Errors
+/// # Panics
 ///
-/// Returns an error if the download fails or the server responds with a non-success status.
+/// Panics if the download fails or the server responds with a non-success status, with a descriptive message.
 pub fn download_obfuscated_file(
     download_url: &str,
     client: &Client,
-) -> Result<Vec<u8>, Box<dyn Error>> {
-    let response = client.get(download_url).send()?.error_for_status()?;
-    let bytes = response.bytes()?;
-    Ok(bytes.to_vec())
+) -> Vec<u8> {
+    let response = client.get(download_url).send().expect("Failed to send request to download obfuscated file")
+        .error_for_status().expect("Non-success status when downloading obfuscated file");
+    let bytes = response.bytes().expect("Failed to read bytes from download response");
+    bytes.to_vec()
 }
